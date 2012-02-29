@@ -40,9 +40,10 @@
         DependsOnTargets="$(CreateManifestResourceNamesDependsOn)"
         >
 
-        <ItemGroup>
-            <_Temporary Remove="@(_Temporary)" />
-        </ItemGroup>
+        <CreateItem Exclude="@(_Temporary)" >
+            <Output TaskParameter="Include" 
+                ItemName="_Temporary" />
+        </CreateItem>
         
         <!-- Create manifest names for culture and non-culture Resx files, and for non-culture Non-Resx resources -->
         <CreateCSharpManifestResourceName
@@ -65,12 +66,20 @@
 
         </CreateCSharpManifestResourceName>
 
-        <ItemGroup>
-            <EmbeddedResource Remove="@(EmbeddedResource)" Condition="'%(EmbeddedResource.ManifestResourceName)' == ''"/>
-            <EmbeddedResource Include="@(_Temporary)" />
-            <_Temporary Remove="@(_Temporary)" />
-        </ItemGroup>
-              
+        <CreateItem Exclude="@(EmbeddedResource)"
+            Condition="'%(EmbeddedResource.ManifestResourceName)' == ''">
+            <Output TaskParameter="Include"
+                ItemName="EmbeddedResource" />
+        </CreateItem>
+        <CreateItem Include="@(_Temporary)">
+            <Output TaskParameter="Include"
+                ItemName="EmbeddedResource" />
+        </CreateItem>
+        <CreateItem Exclude="@(_Temporary)">
+            <Output TaskParameter="Include" 
+                ItemName="_Temporary"/>
+        </CreateItem>
+               
     </Target>
 
 
@@ -92,10 +101,6 @@
     <PropertyGroup>
         <BaseIntermediateOutputPath Condition="'$(IntermediateOutputPath)'!='' ">$(IntermediateOutputPath)</BaseIntermediateOutputPath>
     </PropertyGroup>
-
-    <ItemGroup>
-        <DocFileItem Include="$(DocumentationFile)" Condition="'$(DocumentationFile)'!=''"/>
-    </ItemGroup>
 
     <PropertyGroup>
         <CoreCompileDependsOn>_ComputeNonExistentFileProperty;ResolveMacroProjectReferences;ResolveMacroAssemblyReferences</CoreCompileDependsOn>
@@ -136,34 +141,42 @@
         <Warning Text="DBG: '@(_ResolvedMacroProjectReferencePaths)'." /-->
     </Target>	
 	
+    <!--
+    Only read and write cache file at build time, skip it for load time because its more
+    expensive to write the newly created cache file.
+    -->
+    <PropertyGroup>
+        <ResolveMacroAssemblyReferencesStateFile Condition="'$(BuildingProject)'=='true'">$(IntermediateOutputPath)ResolveMacroAssemblyReference.cache</ResolveMacroAssemblyReferencesStateFile>
+
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Default in task is true -->
+        <_FindDependencies Condition="'$(BuildingProject)' != 'true' or '$(_ResolveReferenceDependencies)' != 'true'">false</_FindDependencies>
+    </PropertyGroup>
     <Target
         Name="ResolveMacroAssemblyReferences"
         Condition="'@(MacroReference)'!=''  or '@(_ResolvedMacroProjectReferencePaths)'!=''"
         DependsOnTargets="$(ResolveAssemblyReferencesDependsOn);ResolveMacroProjectReferences">
-      
-        <ItemGroup>
-          <_ReferenceInstalledAssemblyDirectory Include="$(TargetFrameworkDirectory)" />
-          <_ReferenceInstalledAssemblySubsets Include="$(TargetFrameworkSubset)" />
-        </ItemGroup>
 
-      <!--
-        Only read and write cache file at build time, skip it for load time because its more
-        expensive to write the newly created cache file.
-        -->
-        <PropertyGroup>
-            <ResolveMacroAssemblyReferencesStateFile Condition="'$(BuildingProject)'=='true'">$(IntermediateOutputPath)ResolveMacroAssemblyReference.cache</ResolveMacroAssemblyReferencesStateFile>
+        <CreateItem Include="$(TargetFrameworkDirectory)">
+            <Output TaskParameter="Include"
+                ItemName="_ReferenceInstalledAssemblyDirectory"/>
+        </CreateItem>
+        <CreateItem Include="$(TargetFrameworkSubset)">
+            <Output TaskParameter="Include"
+                ItemName="_ReferenceInstalledAssemblySubsets"/>
+        </CreateItem>
 
-        </PropertyGroup>
 
         <!-- Make an App.Config item that exists when AutoUnify is false. -->
-        <ItemGroup>
-            <_ResolveAssemblyReferencesApplicationConfigFileForExes Include="@(AppConfigWithTargetPath)" Condition="'$(AutoUnifyAssemblyReferences)'=='false'"/>
-        </ItemGroup>
+        <CreateItem Include="@(AppConfigWithTargetPath)"
+            Condition="'$(AutoUnifyAssemblyReferences)'=='false'">
+            <Output TaskParameter="Include" 
+                ItemName=
+                "_ResolveAssemblyReferencesApplicationConfigFileForExes"/>
+        </CreateItem>
 
-        <PropertyGroup>
-            <!-- Default in task is true -->
-            <_FindDependencies Condition="'$(BuildingProject)' != 'true' or '$(_ResolveReferenceDependencies)' != 'true'">false</_FindDependencies>
-        </PropertyGroup>
 <!-- 
             Silent="!$(BuildingProject)"
 -->
@@ -183,13 +196,9 @@
             FindSerializationAssemblies="false"
             FindRelatedFiles="false"
             Silent="false"
-            IgnoreDefaultInstalledAssemblyTables="$(IgnoreInstalledAssemblyTables)"
-            IgnoreDefaultInstalledAssemblySubsetTables="$(IgnoreInstalledAssemblySubsetTables)"
             TargetFrameworkVersion="$(TargetFrameworkVersion)"
             StateFile="$(ResolveMacroAssemblyReferencesStateFile)"
-            InstalledAssemblySubsetTables="@(InstalledAssemblySubsetTables)"
-            TargetFrameworkSubsets="@(_ReferenceInstalledAssemblySubsets)"
-            FullTargetFrameworkSubsetNames="$(FullReferenceAssemblyNames)">
+            >
 
             <Output TaskParameter="ResolvedFiles" ItemName="MacroReferencePath"/>
         </ResolveAssemblyReference>
